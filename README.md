@@ -49,8 +49,9 @@ tbl(con, "proceedings") |> count(DEC_CODE, sort = TRUE) |> head(10) |> collect()
 ```r
 con <- dp_connect(c("cms-medicare", "openpayments"))
 # Tables are qualified by database id; ids with a hyphen need double quotes.
+# With dbplyr, pass the qualified name through I() (in_catalog() does not accept hyphens).
 DBI::dbGetQuery(con, 'SELECT * FROM "cms-medicare".physician_summary LIMIT 5')
-tbl(con, dbplyr::in_catalog("openpayments", "main", "general_payments")) |> head(5) |> collect()
+tbl(con, I('"openpayments".main.general_payments')) |> head(5) |> collect()
 ```
 
 ## Local copies

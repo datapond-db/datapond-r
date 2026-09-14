@@ -61,7 +61,7 @@ contain a hyphen must be double-quoted in SQL:
 ```{r}
 con <- dp_connect(c("cms-medicare", "openpayments"))
 DBI::dbGetQuery(con, 'SELECT * FROM "cms-medicare".physician_summary LIMIT 5')
-tbl(con, dbplyr::in_catalog("openpayments", "main", "general_payments")) |> head(5) |> collect()
+tbl(con, I('"openpayments".main.general_payments')) |> head(5) |> collect()
 dp_disconnect(con)
 ```
 
