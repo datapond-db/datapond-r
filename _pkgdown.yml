@@ -1,0 +1,12 @@
+url: https://datapond-db.github.io/datapond-r
+template:
+  bootstrap: 5
+reference:
+- title: Browse
+  contents: [dp_list, dp_databases, dp_info, dp_registry]
+- title: Connect
+  contents: [dp_connect, dp_disconnect]
+- title: Local files
+  contents: [dp_download, dp_update, dp_data_dir, dp_local_path]
+- title: Explore
+  contents: [dp_describe]

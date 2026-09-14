@@ -1,0 +1,36 @@
+Package: datapond
+Title: Query Curated DuckDB Databases Built from Public Data
+Version: 0.1.0
+Authors@R:
+    person("Ian", "Nason", , "ian.nason@example.com", role = c("aut", "cre"))
+Description: Connects to the datapond registry of curated DuckDB databases
+    built from public government and research data (immigration courts,
+    campaign finance, clinical trials, Medicare, and more). Databases are
+    attached remotely over HTTP so only the byte ranges a query touches are
+    transferred, or downloaded once for local use. Returns standard 'DBI'
+    connections that work with 'dbplyr'.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+Depends:
+    R (>= 4.1)
+Imports:
+    curl (>= 5.0.0),
+    DBI,
+    duckdb (>= 1.0.0),
+    jsonlite,
+    tools,
+    utils
+Suggests:
+    dbplyr (>= 2.3.0),
+    dplyr,
+    knitr,
+    rmarkdown,
+    testthat (>= 3.0.0),
+    tibble,
+    withr
+Config/testthat/edition: 3
+VignetteBuilder: knitr
+URL: https://github.com/datapond-db/datapond-r, https://datapond-db.github.io/website
+BugReports: https://github.com/datapond-db/datapond-r/issues
+Config/roxygen2/version: 8.1.0
