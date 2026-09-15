@@ -19,8 +19,8 @@ Useful links:
 
 ## Author
 
-**Maintainer**: Ian Nason <ian.nason@example.com>
+**Maintainer**: Ian Nason <ign.nason@gmail.com>
 
 Authors:
 
-- Ian Nason <ian.nason@example.com>
+- Ian Nason <ign.nason@gmail.com>
