@@ -12,7 +12,7 @@ Connects to the datapond registry of curated DuckDB databases built from public 
 Useful links:
 \itemize{
   \item \url{https://github.com/datapond-db/datapond-r}
-  \item \url{https://datapond-db.github.io/website}
+  \item \url{https://datapond-db.github.io/website/}
   \item Report bugs at \url{https://github.com/datapond-db/datapond-r/issues}
 }
 
