@@ -1,9 +1,9 @@
 Package: datapond
-Title: Query Curated DuckDB Databases Built from Public Data
+Title: Query Curated 'DuckDB' Databases Built from Public Data
 Version: 0.1.0
 Authors@R:
     person("Ian", "Nason", , "ign.nason@gmail.com", role = c("aut", "cre"))
-Description: Connects to the datapond registry of curated DuckDB databases
+Description: Connects to the 'datapond' registry of curated 'DuckDB' databases
     built from public government and research data (immigration courts,
     campaign finance, clinical trials, Medicare, and more). Databases are
     attached remotely over HTTP so only the byte ranges a query touches are
