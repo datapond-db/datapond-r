@@ -2,7 +2,7 @@
 
 **Public data, instantly queryable.**
 
-R client for the [datapond](https://datapond-db.github.io/website) registry of
+R client for the [datapond](https://datapond-db.github.io/website/) registry of
 curated DuckDB databases built from public government and research data:
 immigration courts, ICE enforcement, campaign finance, clinical trials, Medicare
 billing, industry payments, visa disclosures, and higher education. No full

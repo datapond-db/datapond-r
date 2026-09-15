@@ -18,11 +18,11 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: Ian Nason \email{ian.nason@example.com}
+\strong{Maintainer}: Ian Nason \email{ign.nason@gmail.com}
 
 Authors:
 \itemize{
-  \item Ian Nason \email{ian.nason@example.com}
+  \item Ian Nason \email{ign.nason@gmail.com}
 }
 
 }

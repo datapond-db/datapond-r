@@ -32,6 +32,6 @@ Suggests:
     withr
 Config/testthat/edition: 3
 VignetteBuilder: knitr
-URL: https://github.com/datapond-db/datapond-r, https://datapond-db.github.io/website
+URL: https://github.com/datapond-db/datapond-r, https://datapond-db.github.io/website/
 BugReports: https://github.com/datapond-db/datapond-r/issues
 Config/roxygen2/version: 8.1.0
