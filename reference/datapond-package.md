@@ -13,7 +13,7 @@ Useful links:
 
 - <https://github.com/datapond-db/datapond-r>
 
-- <https://datapond-db.github.io/website>
+- <https://datapond-db.github.io/website/>
 
 - Report bugs at <https://github.com/datapond-db/datapond-r/issues>
 
