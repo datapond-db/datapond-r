@@ -11,6 +11,7 @@ Description: Connects to the datapond registry of curated DuckDB databases
     connections that work with 'dbplyr'.
 License: MIT + file LICENSE
 Encoding: UTF-8
+Language: en-US
 Roxygen: list(markdown = TRUE)
 Depends:
     R (>= 4.1)
