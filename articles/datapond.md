@@ -1,0 +1,79 @@
+# Getting started with datapond
+
+datapond is a registry of curated DuckDB databases built from public
+data. Each database is a single `.duckdb` file hosted on Hugging Face.
+This package attaches those files over HTTP so that only the byte ranges
+your query touches are transferred, or downloads them once for local
+use.
+
+## Browse
+
+``` r
+
+library(datapond)
+dp_list()
+dp_databases()[, c("id", "rows", "size_gb", "data_date_range")]
+dp_info("eoir")
+```
+
+## Query remotely
+
+[`dp_connect()`](https://datapond-db.github.io/datapond-r/reference/dp_connect.md)
+returns an ordinary DuckDB `DBIConnection`:
+
+``` r
+
+con <- dp_connect("eoir")
+DBI::dbGetQuery(con, "SELECT * FROM proceedings LIMIT 5")
+```
+
+Every database ships a data dictionary;
+[`dp_describe()`](https://datapond-db.github.io/datapond-r/reference/dp_describe.md)
+reads it:
+
+``` r
+
+dp_describe(con)                         # tables
+dp_describe(con, table = "proceedings")  # columns, types, null %, join hints
+dp_describe(con, search = "judge")       # columns by name
+```
+
+dbplyr works unchanged:
+
+``` r
+
+library(dplyr)
+tbl(con, "proceedings") |>
+  count(DEC_CODE, sort = TRUE) |>
+  head(10) |>
+  collect()
+dp_disconnect(con)
+```
+
+## Several databases
+
+Pass a vector of ids. Tables are then qualified by database id, and ids
+that contain a hyphen must be double-quoted in SQL:
+
+``` r
+
+con <- dp_connect(c("cms-medicare", "openpayments"))
+DBI::dbGetQuery(con, 'SELECT * FROM "cms-medicare".physician_summary LIMIT 5')
+tbl(con, I('"openpayments".main.general_payments')) |> head(5) |> collect()
+dp_disconnect(con)
+```
+
+## Local copies
+
+Remote mode is cheap for counts and filters but `SELECT *` over a large
+table transfers most of the file. Download once for disk speed:
+
+``` r
+
+dp_download("dol-visas")
+con <- dp_connect("dol-visas", local = TRUE)
+dp_update("dol-visas")   # re-download only if the registry is newer
+```
+
+Set `options(datapond.data_dir = "~/.datapond")` to share downloads with
+the Python package.

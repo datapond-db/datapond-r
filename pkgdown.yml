@@ -1,0 +1,9 @@
+pandoc: 3.8.3
+pkgdown: 2.2.1
+pkgdown_sha: ~
+articles:
+  datapond: datapond.html
+last_built: 2026-09-15T01:11Z
+urls:
+  reference: https://datapond-db.github.io/datapond-r/reference
+  article: https://datapond-db.github.io/datapond-r/articles
