@@ -12,7 +12,11 @@ local_file_server <- function(file, etag_file, env = parent.frame()) {
       etag <- paste0('"', readLines(etag_file, warn = FALSE)[1], '"')
       bytes <- readBin(file, "raw", file.size(file))
       total <- length(bytes)
-      base <- c("ETag" = etag, "Accept-Ranges" = "bytes", "Last-Modified" = "Tue, 15 Sep 2026 00:00:00 GMT")
+      # Content-Encoding: identity keeps httpuv from gzip/chunking the responses, which
+      # stripped Content-Length from HEAD replies and made repeated HEADs fail with
+      # "Invalid status line" (auditor's F18)
+      base <- c("ETag" = etag, "Accept-Ranges" = "bytes", "Last-Modified" = "Tue, 15 Sep 2026 00:00:00 GMT",
+                "Content-Encoding" = "identity", "Content-Type" = "application/octet-stream")
       if (identical(req$REQUEST_METHOD, "HEAD")) {
         return(list(status = 200L, headers = c(base, "Content-Length" = as.character(total)), body = ""))
       }
