@@ -17,7 +17,14 @@ remote_identity <- function(url) {
   # instead and read the validators and the total length from that response.
   tryCatch({
     h <- curl::new_handle(followlocation = TRUE, timeout = 30, httpheader = "Range: bytes=0-0")
-    res <- curl::curl_fetch_memory(url, handle = h)
+    # A server may ignore Range and answer 200 with the whole entity. Read one byte
+    # through a connection and close it, so the probe never buffers a multi-GB
+    # database in memory just to read its headers (auditor's F19).
+    con <- curl::curl(url, handle = h)
+    on.exit(close(con), add = TRUE)
+    suppressWarnings(open(con, "rb"))
+    readBin(con, raw(), n = 1L)
+    res <- curl::handle_data(h)
     if (res$status_code >= 400) return(head)
     hd <- curl::parse_headers_list(res$headers)
     out <- identity_from_headers(hd)

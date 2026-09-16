@@ -17,11 +17,17 @@ local_file_server <- function(file, etag_file, env = parent.frame()) {
       # "Invalid status line" (auditor's F18)
       base <- c("ETag" = etag, "Accept-Ranges" = "bytes", "Last-Modified" = "Tue, 15 Sep 2026 00:00:00 GMT",
                 "Content-Encoding" = "identity", "Content-Type" = "application/octet-stream")
+      # a control file can make the server misbehave: "no-head" answers HEAD with 405 and
+      # "ignore-range" answers every GET with the whole entity (HTTP 200)
+      mode <- if (file.exists(paste0(etag_file, ".mode"))) readLines(paste0(etag_file, ".mode"), warn = FALSE)[1] else "range"
+      if (identical(req$REQUEST_METHOD, "HEAD") && mode == "no-head") {
+        return(list(status = 405L, headers = c("Content-Length" = "0"), body = ""))
+      }
       if (identical(req$REQUEST_METHOD, "HEAD")) {
         return(list(status = 200L, headers = c(base, "Content-Length" = as.character(total)), body = ""))
       }
       range <- req$HTTP_RANGE; if_range <- req$HTTP_IF_RANGE
-      if (!is.null(range) && (is.null(if_range) || identical(if_range, etag))) {
+      if (!is.null(range) && mode != "ignore-range" && (is.null(if_range) || identical(if_range, etag))) {
         start <- as.integer(sub("bytes=([0-9]+)-.*", "\\1", range))
         part <- bytes[(start + 1):total]
         return(list(status = 206L, headers = c(base, "Content-Range" = sprintf("bytes %d-%d/%d", start, total - 1, total),

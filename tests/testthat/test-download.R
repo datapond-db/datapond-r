@@ -190,3 +190,31 @@ test_that("real HTTP: fresh download, header vectors, 206 resume, stale If-Range
   expect_message(dp_update("live"), "remote file changed")
   expect_equal(datapond:::read_sidecar(dp_local_path("live"))$etag, "v3")
 })
+
+
+test_that("the identity probe never buffers the whole file when HEAD is unusable and Range is ignored", {
+  tmp <- withr::local_tempdir()
+  served <- file.path(tmp, "served.bin"); etag_file <- file.path(tmp, "etag.txt")
+  big <- as.raw(sample(0:255, 8L * 1024L * 1024L, replace = TRUE))   # 8 MiB body
+  writeBin(big, served); writeLines("v9", etag_file)
+  url <- local_file_server(served, etag_file)
+  writeLines("no-head", paste0(etag_file, ".mode"))
+  # HEAD answers 405, the ranged GET is answered with a 206: validators and total length come from it
+  writeLines("no-head", paste0(etag_file, ".mode"))
+  id <- datapond:::remote_identity(url)
+  expect_equal(id$etag, "v9"); expect_equal(id$size, length(big))
+  # the server ignores Range and sends all 8 MiB with a 200: the probe still returns the
+  # validator and must not allocate the body
+  writeLines("ignore-range", paste0(etag_file, ".mode"))
+  if (isTRUE(capabilities("profmem"))) {
+    prof <- file.path(tmp, "mem.out"); Rprofmem(prof, threshold = 1024L * 1024L)
+    id2 <- datapond:::remote_identity(url)
+    Rprofmem(NULL)
+    lines <- readLines(prof, warn = FALSE)
+    allocs <- as.numeric(sub(":.*", "", lines[grepl("^[0-9]+ :", lines)]))
+    expect_true(length(allocs) == 0 || max(allocs) < length(big) / 2, info = paste("allocations >= 1 MiB:", paste(allocs, collapse = " ")))
+  } else {
+    id2 <- datapond:::remote_identity(url)
+  }
+  expect_equal(id2$etag, "v9")
+})
