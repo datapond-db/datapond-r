@@ -78,8 +78,10 @@ where <code>dp_connect(id, local = TRUE)</code> looks for them.</p>
     <p>The transfer goes to <code>&lt;file&gt;.part</code> and replaces the destination only after
 it is complete and opens as a DuckDB database, so an existing copy is never
 damaged by a failed download. A partial download is resumed only when the
-remote file is still the same revision; otherwise it restarts. A sidecar
-<code>&lt;file&gt;.datapond.json</code> records the remote file identity for <code><a href="dp_update.html">dp_update()</a></code>.</p>
+server identifies the file's revision (ETag, else Last-Modified), the partial
+file was started against that revision, and the ranged request is bound to it
+with <code>If-Range</code>; otherwise it restarts. A sidecar <code>&lt;file&gt;.datapond.json</code>
+records the remote file identity for <code><a href="dp_update.html">dp_update()</a></code>.</p>
     </div>
 
     <div class="section level2">

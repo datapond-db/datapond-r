@@ -1,11 +1,12 @@
 # Update a local database if the remote file has changed
 
-Compares the identity of the remote file (ETag and size, from a HEAD
-request) with the one recorded when the local copy was downloaded, and
-re-downloads when they differ. Copies without that record fall back to
-the registry's `updated` date versus the file's modification time and
-are re-downloaded whenever that comparison is inconclusive. The registry
-is re-fetched first.
+Compares the identity of the remote file (ETag, else Last-Modified, from
+a HEAD request) with the one recorded when the local copy was
+downloaded, and re-downloads when they differ or when the revision
+cannot be verified. Copies without that record fall back to the
+registry's `updated` date versus the file's modification time and are
+re-downloaded whenever that comparison is inconclusive. The registry is
+re-fetched first.
 
 ## Usage
 

@@ -40,7 +40,9 @@ The local path, invisibly.
 The transfer goes to `<file>.part` and replaces the destination only
 after it is complete and opens as a DuckDB database, so an existing copy
 is never damaged by a failed download. A partial download is resumed
-only when the remote file is still the same revision; otherwise it
+only when the server identifies the file's revision (ETag, else
+Last-Modified), the partial file was started against that revision, and
+the ranged request is bound to it with `If-Range`; otherwise it
 restarts. A sidecar `<file>.datapond.json` records the remote file
 identity for
 [`dp_update()`](https://datapond-db.github.io/datapond-r/reference/dp_update.md).
