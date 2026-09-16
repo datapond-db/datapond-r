@@ -2,6 +2,12 @@
 
 ## datapond 0.1.1
 
+- The identity probe used when a server’s HEAD carries no validator
+  reads one byte through a connection and closes it, so a server that
+  ignores `Range` can no longer make the client buffer the whole
+  database in memory just to read its headers. Covered by loopback tests
+  where HEAD answers 405 and where `Range` is ignored (with a
+  memory-profiling assertion).
 - Real downloads work again: the response headers curl returns are a
   vector of lines, not one string, and a resumed transfer’s
   `Content-Length` is only the remaining range (the total comes from
