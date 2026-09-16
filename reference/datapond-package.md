@@ -1,7 +1,7 @@
-# datapond: Query Curated DuckDB Databases Built from Public Data
+# datapond: Query Curated 'DuckDB' Databases Built from Public Data
 
-Connects to the datapond registry of curated DuckDB databases built from
-public government and research data (immigration courts, campaign
+Connects to the 'datapond' registry of curated 'DuckDB' databases built
+from public government and research data (immigration courts, campaign
 finance, clinical trials, Medicare, and more). Databases are attached
 remotely over HTTP so only the byte ranges a query touches are
 transferred, or downloaded once for local use. Returns standard 'DBI'

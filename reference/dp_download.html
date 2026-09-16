@@ -11,7 +11,7 @@ where dp_connect(id, local = TRUE) looks for them."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">datapond</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -72,6 +72,14 @@ where <code>dp_connect(id, local = TRUE)</code> looks for them.</p>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>The local path, invisibly.</p>
+    </div>
+    <div class="section level2">
+    <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
+    <p>The transfer goes to <code>&lt;file&gt;.part</code> and replaces the destination only after
+it is complete and opens as a DuckDB database, so an existing copy is never
+damaged by a failed download. A partial download is resumed only when the
+remote file is still the same revision; otherwise it restarts. A sidecar
+<code>&lt;file&gt;.datapond.json</code> records the remote file identity for <code><a href="dp_update.html">dp_update()</a></code>.</p>
     </div>
 
     <div class="section level2">
