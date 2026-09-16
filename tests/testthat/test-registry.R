@@ -33,3 +33,12 @@ test_that("dp_info prints and dp_databases tabulates", {
   expect_equal(dbs$id, c("testdb", "test-hyphen"))
   expect_equal(dbs$rows, c(5, 5))
 })
+
+test_that("the registry parses as UTF-8 regardless of locale", {
+  raw <- charToRaw('{"databases":[{"id":"café","name":"Café"}]}')
+  loc <- suppressWarnings(Sys.getlocale("LC_CTYPE"))
+  ok <- suppressWarnings(Sys.setlocale("LC_CTYPE", "C"))
+  if (nzchar(ok)) withr::defer(Sys.setlocale("LC_CTYPE", loc))
+  reg <- datapond:::parse_registry_bytes(raw)
+  expect_equal(reg$databases[[1]]$id, "café")
+})

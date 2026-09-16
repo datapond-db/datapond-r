@@ -23,6 +23,13 @@ Downloads the full \code{.duckdb} file so later queries run at disk speed.
 Files are saved as \verb{<id>.duckdb} under \code{\link[=dp_data_dir]{dp_data_dir()}} (or \code{path}), which is
 where \code{dp_connect(id, local = TRUE)} looks for them.
 }
+\details{
+The transfer goes to \verb{<file>.part} and replaces the destination only after
+it is complete and opens as a DuckDB database, so an existing copy is never
+damaged by a failed download. A partial download is resumed only when the
+remote file is still the same revision; otherwise it restarts. A sidecar
+\verb{<file>.datapond.json} records the remote file identity for \code{\link[=dp_update]{dp_update()}}.
+}
 \examples{
 \dontrun{
 dp_download("dol-visas")

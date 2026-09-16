@@ -9,7 +9,7 @@ cache_is_fresh <- function(path) {
     as.numeric(difftime(Sys.time(), file.mtime(path), units = "secs")) < registry_ttl()
 }
 
-read_registry_file <- function(path) jsonlite::fromJSON(path, simplifyVector = FALSE)
+read_registry_file <- function(path) parse_registry_bytes(readBin(path, "raw", file.size(path)))
 
 fetch_registry <- function() {
   url <- registry_url()
@@ -35,9 +35,28 @@ fetch_registry <- function() {
          conditionMessage(e), call. = FALSE)
   })
   if (is.null(raw)) return(read_registry_file(path))
-  reg <- jsonlite::fromJSON(rawToChar(raw), simplifyVector = FALSE)
+  # registry.json is UTF-8; rawToChar() yields unmarked text, which does not parse
+  # in a C/ASCII locale unless the encoding is declared explicitly
+  reg <- tryCatch(parse_registry_bytes(raw), error = function(e) {
+    if (file.exists(path)) {
+      warning("The fetched datapond registry could not be parsed (", conditionMessage(e),
+              "); using the cached copy.", call. = FALSE)
+      return(NULL)
+    }
+    stop("The fetched datapond registry could not be parsed and no local cache is available: ",
+         conditionMessage(e), call. = FALSE)
+  })
+  if (is.null(reg)) return(read_registry_file(path))
   dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
   writeBin(raw, path)
+  reg
+}
+
+parse_registry_bytes <- function(raw) {
+  txt <- rawToChar(raw)
+  Encoding(txt) <- "UTF-8"
+  reg <- jsonlite::fromJSON(txt, simplifyVector = FALSE)
+  if (!is.list(reg) || is.null(reg$databases)) stop("no 'databases' element")
   reg
 }
 
@@ -61,9 +80,9 @@ dp_registry <- function(refresh = FALSE) {
   fetch_registry()
 }
 
-dp_get_database <- function(id) {
+dp_get_database <- function(id, refresh = FALSE) {
   stopifnot(is.character(id), length(id) == 1L, !is.na(id))
-  dbs <- dp_registry()$databases
+  dbs <- dp_registry(refresh = refresh)$databases
   ids <- vapply(dbs, function(d) d$id %||% NA_character_, character(1))
   i <- match(id, ids)
   if (is.na(i)) {

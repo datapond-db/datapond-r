@@ -4,9 +4,9 @@
 \name{datapond-package}
 \alias{datapond}
 \alias{datapond-package}
-\title{datapond: Query Curated DuckDB Databases Built from Public Data}
+\title{datapond: Query Curated 'DuckDB' Databases Built from Public Data}
 \description{
-Connects to the datapond registry of curated DuckDB databases built from public government and research data (immigration courts, campaign finance, clinical trials, Medicare, and more). Databases are attached remotely over HTTP so only the byte ranges a query touches are transferred, or downloaded once for local use. Returns standard 'DBI' connections that work with 'dbplyr'.
+Connects to the 'datapond' registry of curated 'DuckDB' databases built from public government and research data (immigration courts, campaign finance, clinical trials, Medicare, and more). Databases are attached remotely over HTTP so only the byte ranges a query touches are transferred, or downloaded once for local use. Returns standard 'DBI' connections that work with 'dbplyr'.
 }
 \seealso{
 Useful links:

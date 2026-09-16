@@ -1,6 +1,6 @@
 Package: datapond
 Title: Query Curated 'DuckDB' Databases Built from Public Data
-Version: 0.1.0
+Version: 0.1.1
 Authors@R:
     person("Ian", "Nason", , "ign.nason@gmail.com", role = c("aut", "cre"))
 Description: Connects to the 'datapond' registry of curated 'DuckDB' databases
