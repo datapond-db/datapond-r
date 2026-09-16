@@ -35,7 +35,8 @@
 
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.1.1" id="datapond-011">datapond 0.1.1<a class="anchor" aria-label="anchor" href="#datapond-011"></a></h2>
-<ul><li>
+<ul><li>Real downloads work again: the response headers curl returns are a vector of lines, not one string, and a resumed transfer’s <code>Content-Length</code> is only the remaining range (the total comes from <code>Content-Range</code>). A server that answers a stale <code>If-Range</code> with the whole file makes curl abort the resume; the client now discards the partial file and restarts. These paths are covered by a real loopback HTTP server test (httpuv + callr, Suggests).</li>
+<li>
 <code><a href="../reference/dp_download.html">dp_download()</a></code> streams to <code>&lt;file&gt;.part</code>, resumes only while the remote file is the same revision (a strong validator, ETag else Last-Modified, recorded beside the partial file; the ranged request is bound to it with <code>If-Range</code> and the GET response’s validator is checked, so a file that changes between HEAD and GET is re-downloaded from scratch; no validator, no resume), validates the finished file as a DuckDB database, rejects a directory at the destination, and errors instead of warning when the destination cannot be replaced. An existing local copy is never damaged by a failed download.</li>
 <li>
 <code><a href="../reference/dp_update.html">dp_update()</a></code> compares the remote file’s ETag (else Last-Modified) with the identity recorded at download time (<code>&lt;file&gt;.datapond.json</code>) instead of the file’s modification time; equal sizes alone never count as current; the registry is re-fetched first.</li>
