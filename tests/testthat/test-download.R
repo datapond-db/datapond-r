@@ -153,9 +153,10 @@ test_that("real HTTP: fresh download, header vectors, 206 resume, stale If-Range
   dest <- file.path(tmp, "x.duckdb")
 
   # 1. fresh download through the public function: headers parsed, sidecar written
+  expect_equal(datapond:::remote_identity(url)$etag, "v1", info = "HEAD identity against the loopback server")
   datapond:::download_file(url, dest, quiet = TRUE, id = "x")
   expect_identical(readBin(dest, "raw", file.size(dest)), v1)
-  expect_equal(datapond:::read_sidecar(dest)$etag, "v1")
+  expect_equal(datapond:::read_sidecar(dest)$etag, "v1", info = "sidecar written from the transfer's identity")
 
   # 2. resume of an unchanged revision: server answers 206; the file completes and
   #    the 206 body length is not mistaken for the file length
@@ -182,6 +183,8 @@ test_that("real HTTP: fresh download, header vectors, 206 resume, stale If-Range
     jsonlite::write_json(list(databases = list(list(id = "live", name = "Live", attach_url = url, updated = "2026-09-15"))),
                          reg, auto_unbox = TRUE); reg })
   dp_download("live", quiet = TRUE)
+  side <- datapond:::read_sidecar(dp_local_path("live"))
+  expect_equal(side$etag, "v2", info = paste("sidecar:", paste(names(side), side, collapse = " ")))
   expect_message(dp_update("live"), "already up to date")
   writeBin(v1, served); writeLines("v3", etag_file)
   expect_message(dp_update("live"), "remote file changed")

@@ -7,12 +7,26 @@ remote_identity <- function(url) {
     if (!file.exists(url)) return(list())
     return(list(size = file.size(url), etag = unname(tools::md5sum(url))))
   }
-  tryCatch({
+  head <- tryCatch({
     h <- curl::new_handle(nobody = TRUE, followlocation = TRUE, timeout = 30)
     res <- curl::curl_fetch_memory(url, handle = h)
-    if (res$status_code >= 400) return(list())
-    identity_from_headers(curl::parse_headers_list(res$headers))
+    if (res$status_code >= 400) list() else identity_from_headers(curl::parse_headers_list(res$headers))
   }, error = function(e) list())
+  if (!is.null(strong_validator(head))) return(head)
+  # Some servers answer HEAD without validators (or not at all): ask for the first byte
+  # instead and read the validators and the total length from that response.
+  tryCatch({
+    h <- curl::new_handle(followlocation = TRUE, timeout = 30, httpheader = "Range: bytes=0-0")
+    res <- curl::curl_fetch_memory(url, handle = h)
+    if (res$status_code >= 400) return(head)
+    hd <- curl::parse_headers_list(res$headers)
+    out <- identity_from_headers(hd)
+    if (res$status_code == 206) {
+      total <- if (!is.null(hd[["content-range"]])) suppressWarnings(as.numeric(sub(".*/", "", hd[["content-range"]]))) else NA_real_
+      out$size <- if (!is.na(total)) total else NULL
+    }
+    if (length(out) > 0) out else head
+  }, error = function(e) head)
 }
 
 identity_from_headers <- function(hd) {
