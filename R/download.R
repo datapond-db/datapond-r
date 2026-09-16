@@ -11,16 +11,23 @@ remote_identity <- function(url) {
     h <- curl::new_handle(nobody = TRUE, followlocation = TRUE, timeout = 30)
     res <- curl::curl_fetch_memory(url, handle = h)
     if (res$status_code >= 400) return(list())
-    hd <- curl::parse_headers_list(res$headers)
-    etag <- hd[["x-linked-etag"]] %||% hd[["etag"]]
-    size <- hd[["x-linked-size"]] %||% hd[["content-length"]]
-    out <- list()
-    if (!is.null(etag)) out$etag <- gsub('^W/|"', "", etag)
-    if (!is.null(size)) out$size <- suppressWarnings(as.numeric(size))
-    if (!is.null(hd[["last-modified"]])) out$last_modified <- hd[["last-modified"]]
-    out
+    identity_from_headers(curl::parse_headers_list(res$headers))
   }, error = function(e) list())
 }
+
+identity_from_headers <- function(hd) {
+  etag <- hd[["x-linked-etag"]] %||% hd[["etag"]]
+  size <- hd[["x-linked-size"]] %||% hd[["content-length"]]
+  out <- list()
+  if (!is.null(etag)) out$etag <- gsub('^W/|"', "", etag)
+  if (!is.null(size)) out$size <- suppressWarnings(as.numeric(size))
+  if (!is.null(hd[["last-modified"]])) out$last_modified <- hd[["last-modified"]]
+  out
+}
+
+# A validator that identifies a revision: the ETag, or failing that Last-Modified.
+# Size alone is not one (two revisions can have the same length).
+strong_validator <- function(identity) identity$etag %||% identity$last_modified
 
 sidecar_path <- function(dest) paste0(dest, ".datapond.json")
 
@@ -38,34 +45,61 @@ read_sidecar <- function(dest) {
   tryCatch(jsonlite::fromJSON(p, simplifyVector = TRUE), error = function(e) list())
 }
 
-# Transfer `url` to `part`, resuming when the partial file still belongs to the
-# same remote revision. `part_meta` records the identity the partial file was
-# started against; a different ETag/size/Last-Modified restarts from zero, so a
-# resume can never splice bytes from two versions of a file.
-transfer <- function(url, part, identity, quiet = FALSE, resume = TRUE) {
+# Transfer `url` to `part`. A partial file is resumed only when (a) the server gave a
+# strong validator (ETag, else Last-Modified), (b) the partial file was started against
+# that same validator, and (c) the ranged request is bound to it with If-Range, so the
+# server sends the whole file instead of a range if the revision changed meanwhile.
+# The GET response's own validator is compared with the one the transfer was planned
+# against; a mismatch (the file changed between HEAD and GET) discards the bytes and
+# starts over once. Without any validator there is no resume at all.
+transfer <- function(url, part, identity, quiet = FALSE, resume = TRUE, attempts = 2) {
   meta <- paste0(part, ".meta")
-  if (file.exists(part)) {
-    prior <- if (file.exists(meta)) tryCatch(jsonlite::fromJSON(meta), error = function(e) NULL) else NULL
-    same <- !is.null(prior) && length(identity) > 0 && identical(prior$etag, identity$etag) &&
-      identical(as.numeric(prior$size), as.numeric(identity$size)) &&
-      identical(prior$last_modified, identity$last_modified)
-    if (!resume || !same) {
-      unlink(c(part, meta))
+  validator <- strong_validator(identity)
+  for (attempt in seq_len(attempts)) {
+    resumable <- resume && !is.null(validator)
+    if (file.exists(part)) {
+      prior <- if (file.exists(meta)) tryCatch(jsonlite::fromJSON(meta), error = function(e) NULL) else NULL
+      same <- resumable && !is.null(prior) && identical(strong_validator(prior), validator)
+      if (!same) unlink(c(part, meta))
     }
+    if (!file.exists(part)) {
+      writeLines(jsonlite::toJSON(identity, auto_unbox = TRUE), meta)
+    }
+    headers <- if (resumable && file.exists(part) && file.size(part) > 0) {
+      c(paste0("If-Range: ", if (!is.null(identity$etag)) paste0('"', identity$etag, '"') else identity$last_modified))
+    } else character()
+    res <- curl::multi_download(url, part, resume = resumable, progress = !quiet, httpheader = headers)
+    if (!isTRUE(res$success) || is.na(res$status_code) || res$status_code >= 400) {
+      stop(sprintf("Download failed (HTTP %s): %s", res$status_code, url), call. = FALSE)
+    }
+    got <- response_identity(res)
+    got_validator <- strong_validator(got)
+    if (!is.null(validator) && !is.null(got_validator) && !identical(got_validator, validator)) {
+      # the remote file changed while we were transferring: never install the mixture
+      unlink(c(part, meta))
+      if (attempt < attempts) {
+        if (!quiet) message("The remote file changed during the download; starting over.")
+        identity <- if (length(got) > 0) got else remote_identity(url)
+        validator <- strong_validator(identity)
+        next
+      }
+      stop("The remote file kept changing during the download; try again later.", call. = FALSE)
+    }
+    unlink(meta)
+    return(invisible(list(part = part, identity = if (length(got) > 0) modifyList(identity, got) else identity)))
   }
-  if (!file.exists(part)) {
-    writeLines(jsonlite::toJSON(identity, auto_unbox = TRUE), meta)
-  }
-  res <- curl::multi_download(url, part, resume = resume, progress = !quiet)
-  if (!isTRUE(res$success) || is.na(res$status_code) || res$status_code >= 400) {
-    stop(sprintf("Download failed (HTTP %s): %s", res$status_code, url), call. = FALSE)
-  }
-  unlink(meta)
-  invisible(part)
+}
+
+# Identity from a multi_download() result row (its `headers` column holds the raw headers).
+response_identity <- function(res) {
+  hdr <- tryCatch(res$headers[[1]], error = function(e) NULL)
+  if (is.null(hdr) || !nzchar(hdr)) return(list())
+  tryCatch(identity_from_headers(curl::parse_headers_list(charToRaw(hdr))), error = function(e) list())
 }
 
 # Open the finished file read-only to make sure it is a DuckDB database.
 validate_database <- function(path) {
+  if (dir.exists(path)) stop("Expected a database file but found a directory: ", path, call. = FALSE)
   con <- tryCatch(DBI::dbConnect(duckdb::duckdb(), dbdir = path, read_only = TRUE),
                   error = function(e) stop("Downloaded file is not a readable DuckDB database: ",
                                            conditionMessage(e), call. = FALSE))
@@ -74,27 +108,36 @@ validate_database <- function(path) {
   invisible(TRUE)
 }
 
-# Move the completed part file over the destination. `file.rename()` returns
-# FALSE instead of erroring (and cannot cross filesystems), so the result is
-# checked and a copy is attempted before giving up; the previous destination is
-# untouched on failure.
+# Move the completed part file over the destination. The destination must not be a
+# directory; `file.rename()` returns FALSE instead of erroring (and cannot cross
+# filesystems), so the result is checked and a copy to a temporary sibling followed by a
+# rename is attempted before giving up. The previous destination survives every failure.
 install_file <- function(part, dest) {
+  if (dir.exists(dest)) {
+    stop(sprintf("Destination %s is a directory; give a file path ending in .duckdb.", dest), call. = FALSE)
+  }
   ok <- suppressWarnings(file.rename(part, dest))
   if (!isTRUE(ok)) {
-    ok <- suppressWarnings(file.copy(part, dest, overwrite = TRUE))
+    staged <- paste0(dest, ".staged")
+    ok <- suppressWarnings(file.copy(part, staged, overwrite = TRUE)) && suppressWarnings(file.rename(staged, dest))
+    unlink(staged)
     if (isTRUE(ok)) unlink(part)
   }
-  if (!isTRUE(ok) || !file.exists(dest)) {
+  if (!isTRUE(ok) || !file.exists(dest) || dir.exists(dest)) {
     stop(sprintf("Could not replace %s with the downloaded file (kept at %s).", dest, part), call. = FALSE)
   }
   invisible(dest)
 }
 
 download_file <- function(url, dest, quiet = FALSE, resume = TRUE, id = NULL) {
+  if (dir.exists(dest)) {
+    stop(sprintf("Destination %s is a directory; give a file path ending in .duckdb.", dest), call. = FALSE)
+  }
   dir.create(dirname(dest), recursive = TRUE, showWarnings = FALSE)
   part <- paste0(dest, ".part")
   identity <- remote_identity(url)
-  transfer(url, part, identity, quiet = quiet, resume = resume)
+  done <- transfer(url, part, identity, quiet = quiet, resume = resume)
+  identity <- done$identity
   if (!is.null(identity$size) && !is.na(identity$size) && file.size(part) != identity$size) {
     unlink(part)
     stop(sprintf("Download incomplete: %s of %s bytes.", file.size(part), identity$size), call. = FALSE)
@@ -114,8 +157,10 @@ download_file <- function(url, dest, quiet = FALSE, resume = TRUE, id = NULL) {
 #' The transfer goes to `<file>.part` and replaces the destination only after
 #' it is complete and opens as a DuckDB database, so an existing copy is never
 #' damaged by a failed download. A partial download is resumed only when the
-#' remote file is still the same revision; otherwise it restarts. A sidecar
-#' `<file>.datapond.json` records the remote file identity for [dp_update()].
+#' server identifies the file's revision (ETag, else Last-Modified), the partial
+#' file was started against that revision, and the ranged request is bound to it
+#' with `If-Range`; otherwise it restarts. A sidecar `<file>.datapond.json`
+#' records the remote file identity for [dp_update()].
 #'
 #' @param id Database id.
 #' @param path Destination file or directory. Defaults to [dp_data_dir()].
@@ -143,7 +188,9 @@ dp_download <- function(id, path = NULL, quiet = FALSE, resume = TRUE) {
   invisible(dest)
 }
 
-# NULL when the local copy matches the remote file, else a short reason.
+# NULL when the local copy is verifiably the remote revision, else a short reason.
+# Only a strong validator (ETag, else Last-Modified) can declare a copy current;
+# equal sizes are not evidence, so without a validator the copy is re-downloaded.
 needs_update <- function(db, local) {
   url <- db$download_url %||% db$attach_url
   side <- read_sidecar(local)
@@ -154,9 +201,10 @@ needs_update <- function(db, local) {
   if (!is.null(side$etag) && !is.null(remote$etag)) {
     return(if (identical(side$etag, remote$etag)) NULL else "remote file changed")
   }
-  if (!is.null(side$size) && !is.null(remote$size)) {
-    return(if (identical(as.numeric(side$size), as.numeric(remote$size))) NULL else "remote size changed")
+  if (!is.null(side$last_modified) && !is.null(remote$last_modified)) {
+    return(if (identical(side$last_modified, remote$last_modified)) NULL else "remote file changed")
   }
+  if (length(side) > 0 && length(remote) > 0) return("remote revision cannot be verified (no ETag or Last-Modified)")
   updated <- db$updated
   if (!is.null(updated)) {
     remote_dt <- as.POSIXct(updated, tz = "UTC",
@@ -173,12 +221,12 @@ needs_update <- function(db, local) {
 
 #' Update a local database if the remote file has changed
 #'
-#' Compares the identity of the remote file (ETag and size, from a HEAD
-#' request) with the one recorded when the local copy was downloaded, and
-#' re-downloads when they differ. Copies without that record fall back to the
-#' registry's `updated` date versus the file's modification time and are
-#' re-downloaded whenever that comparison is inconclusive. The registry is
-#' re-fetched first.
+#' Compares the identity of the remote file (ETag, else Last-Modified, from a
+#' HEAD request) with the one recorded when the local copy was downloaded, and
+#' re-downloads when they differ or when the revision cannot be verified. Copies
+#' without that record fall back to the registry's `updated` date versus the
+#' file's modification time and are re-downloaded whenever that comparison is
+#' inconclusive. The registry is re-fetched first.
 #'
 #' @inheritParams dp_download
 #' @return The local path, invisibly.
