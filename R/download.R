@@ -68,8 +68,20 @@ transfer <- function(url, part, identity, quiet = FALSE, resume = TRUE, attempts
     headers <- if (resumable && file.exists(part) && file.size(part) > 0) {
       c(paste0("If-Range: ", if (!is.null(identity$etag)) paste0('"', identity$etag, '"') else identity$last_modified))
     } else character()
+    resuming <- resumable && file.exists(part) && file.size(part) > 0
     res <- curl::multi_download(url, part, resume = resumable, progress = !quiet, httpheader = headers)
-    if (!isTRUE(res$success) || is.na(res$status_code) || res$status_code >= 400) {
+    ok <- isTRUE(res$success) && !is.na(res$status_code) && res$status_code < 400
+    if (!ok && resuming && attempt < attempts) {
+      # A server that answers a mismatched If-Range with the whole entity (HTTP 200) makes
+      # curl abort the resume; the partial file belongs to another revision, so discard
+      # it and transfer afresh against the server's current identity.
+      if (!quiet) message("Resume rejected by the server; restarting the download.")
+      unlink(c(part, meta))
+      identity <- remote_identity(url)
+      validator <- strong_validator(identity)
+      next
+    }
+    if (!ok) {
       stop(sprintf("Download failed (HTTP %s): %s", res$status_code, url), call. = FALSE)
     }
     got <- response_identity(res)
@@ -86,15 +98,31 @@ transfer <- function(url, part, identity, quiet = FALSE, resume = TRUE, attempts
       stop("The remote file kept changing during the download; try again later.", call. = FALSE)
     }
     unlink(meta)
-    return(invisible(list(part = part, identity = if (length(got) > 0) modifyList(identity, got) else identity)))
+    return(invisible(list(part = part, identity = if (length(got) > 0) utils::modifyList(identity, got) else identity)))
   }
 }
 
-# Identity from a multi_download() result row (its `headers` column holds the raw headers).
+# Identity from a multi_download() result row. Its `headers` column holds a character
+# vector of header lines (one element per line, possibly several for redirects), not one
+# string. Content-Length is only the file's length on a 200; on a 206 (resumed range)
+# the total comes from Content-Range, so a range response never masquerades as the
+# full-file length.
 response_identity <- function(res) {
   hdr <- tryCatch(res$headers[[1]], error = function(e) NULL)
-  if (is.null(hdr) || !nzchar(hdr)) return(list())
-  tryCatch(identity_from_headers(curl::parse_headers_list(charToRaw(hdr))), error = function(e) list())
+  if (is.null(hdr) || length(hdr) == 0 || !any(nzchar(hdr))) return(list())
+  # with redirects the vector holds several responses; the final one describes the file
+  starts <- grep("^HTTP/", hdr)
+  if (length(starts) > 1) hdr <- hdr[max(starts):length(hdr)]
+  hd <- tryCatch(curl::parse_headers_list(paste(hdr, collapse = "\r\n")), error = function(e) NULL)
+  if (is.null(hd)) return(list())
+  out <- identity_from_headers(hd)
+  status <- suppressWarnings(as.integer(res$status_code[[1]]))
+  range <- hd[["content-range"]]
+  if (!is.na(status) && status == 206) {
+    total <- if (!is.null(range)) suppressWarnings(as.numeric(sub(".*/", "", range))) else NA_real_
+    out$size <- if (!is.na(total)) total else NULL
+  }
+  out
 }
 
 # Open the finished file read-only to make sure it is a DuckDB database.

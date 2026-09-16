@@ -55,8 +55,9 @@ fake_server <- function(calls_env) {
     existed <- file.exists(destfiles) && isTRUE(resume)
     calls_env$calls[[length(calls_env$calls) + 1]] <- list(existed = existed, resume = resume, headers = httpheader)
     cat(if (existed) "version-two" else "NEW-version-two", file = destfiles, append = existed)
+    # curl returns the response headers as a character vector of lines
     data.frame(success = TRUE, status_code = 200L,
-               headers = I(list(paste0("HTTP/1.1 200 OK\r\netag: \"", calls_env$server_etag, "\"\r\n\r\n"))))
+               headers = I(list(c("HTTP/1.1 200 OK", paste0("etag: \"", calls_env$server_etag, "\""), ""))))
   }
 }
 
@@ -140,4 +141,49 @@ test_that("a partial file never masquerades as a database", {
   tmp <- withr::local_tempdir()
   bad <- file.path(tmp, "bad.duckdb"); writeLines("not a database", bad)
   expect_error(datapond:::validate_database(bad), "not a readable DuckDB")
+})
+
+
+test_that("real HTTP: fresh download, header vectors, 206 resume, stale If-Range restart", {
+  tmp <- withr::local_tempdir()
+  served <- file.path(tmp, "served.bin"); etag_file <- file.path(tmp, "etag.txt")
+  v1 <- fixture_bytes(tmp, 1); v2 <- fixture_bytes(tmp, 2)
+  writeBin(v1, served); writeLines("v1", etag_file)
+  url <- local_file_server(served, etag_file)
+  dest <- file.path(tmp, "x.duckdb")
+
+  # 1. fresh download through the public function: headers parsed, sidecar written
+  datapond:::download_file(url, dest, quiet = TRUE, id = "x")
+  expect_identical(readBin(dest, "raw", file.size(dest)), v1)
+  expect_equal(datapond:::read_sidecar(dest)$etag, "v1")
+
+  # 2. resume of an unchanged revision: server answers 206; the file completes and
+  #    the 206 body length is not mistaken for the file length
+  part <- paste0(dest, ".part")
+  writeBin(v1[1:20000], part); writeLines('{"etag":"v1","size":0}', paste0(part, ".meta"))
+  unlink(dest)
+  datapond:::download_file(url, dest, quiet = TRUE, id = "x")
+  expect_identical(readBin(dest, "raw", file.size(dest)), v1)
+
+  # 3. revision changes between HEAD and the ranged GET: the server answers the stale
+  #    If-Range with the whole new entity, curl aborts the resume, the client restarts
+  #    and installs the new revision
+  identity <- datapond:::remote_identity(url)         # etag v1
+  writeBin(v2, served); writeLines("v2", etag_file)     # revision changes now
+  writeBin(v1[1:20000], part); writeLines('{"etag":"v1"}', paste0(part, ".meta"))
+  res <- datapond:::transfer(url, part, identity, quiet = TRUE)
+  expect_identical(readBin(part, "raw", file.size(part)), v2)
+  expect_equal(res$identity$etag, "v2")
+
+  # 4. dp_update against the live server: current copy is kept, a new revision is fetched
+  local_datapond()
+  withr::local_options(datapond.registry_url = {
+    reg <- file.path(tmp, "reg.json")
+    jsonlite::write_json(list(databases = list(list(id = "live", name = "Live", attach_url = url, updated = "2026-09-15"))),
+                         reg, auto_unbox = TRUE); reg })
+  dp_download("live", quiet = TRUE)
+  expect_message(dp_update("live"), "already up to date")
+  writeBin(v1, served); writeLines("v3", etag_file)
+  expect_message(dp_update("live"), "remote file changed")
+  expect_equal(datapond:::read_sidecar(dp_local_path("live"))$etag, "v3")
 })

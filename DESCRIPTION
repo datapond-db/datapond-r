@@ -23,6 +23,8 @@ Imports:
     tools,
     utils
 Suggests:
+    callr,
+    httpuv,
     dbplyr (>= 2.3.0),
     dplyr,
     knitr,

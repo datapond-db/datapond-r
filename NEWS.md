@@ -1,5 +1,11 @@
 # datapond 0.1.1
 
+* Real downloads work again: the response headers curl returns are a vector
+  of lines, not one string, and a resumed transfer's `Content-Length` is only
+  the remaining range (the total comes from `Content-Range`). A server that
+  answers a stale `If-Range` with the whole file makes curl abort the resume;
+  the client now discards the partial file and restarts. These paths are
+  covered by a real loopback HTTP server test (httpuv + callr, Suggests).
 * `dp_download()` streams to `<file>.part`, resumes only while the remote file
   is the same revision (a strong validator, ETag else Last-Modified, recorded
   beside the partial file; the ranged request is bound to it with `If-Range`
