@@ -4,7 +4,12 @@
 \alias{dp_connect}
 \title{Connect to one or more datapond databases}
 \usage{
-dp_connect(id, local = FALSE, quiet = FALSE)
+dp_connect(
+  id,
+  local = FALSE,
+  quiet = FALSE,
+  config = getOption("datapond.duckdb_config", list())
+)
 }
 \arguments{
 \item{id}{One or more database ids (see \code{\link[=dp_list]{dp_list()}}).}
@@ -13,6 +18,13 @@ dp_connect(id, local = FALSE, quiet = FALSE)
 files?}
 
 \item{quiet}{Suppress progress messages?}
+
+\item{config}{Named list of DuckDB configuration values, passed to
+\code{\link[duckdb:duckdb]{duckdb::duckdb()}} before any database is attached. Defaults to
+\code{getOption("datapond.duckdb_config", list())}. Use \code{memory_limit},
+\code{threads}, \code{temp_directory}, and \code{max_temp_directory_size} to bound query
+resources. Values must be non-missing scalars and are converted to strings
+for DuckDB. DuckDB's memory limit does not include all R allocations.}
 }
 \value{
 A \code{duckdb_connection} (a \code{DBIConnection}). Close it with

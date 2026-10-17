@@ -54,10 +54,15 @@ fake_server <- function(calls_env) {
   function(urls, destfiles, resume = TRUE, progress = TRUE, httpheader = character(), ...) {
     existed <- file.exists(destfiles) && isTRUE(resume)
     calls_env$calls[[length(calls_env$calls) + 1]] <- list(existed = existed, resume = resume, headers = httpheader)
+    start <- if (existed) file.size(destfiles) else 0
     cat(if (existed) "version-two" else "NEW-version-two", file = destfiles, append = existed)
-    # curl returns the response headers as a character vector of lines
-    data.frame(success = TRUE, status_code = 200L,
-               headers = I(list(c("HTTP/1.1 200 OK", paste0("etag: \"", calls_env$server_etag, "\""), ""))))
+    # curl returns a vector of header lines; a successful resume is a 206.
+    hdr <- c(if (existed) "HTTP/1.1 206 Partial Content" else "HTTP/1.1 200 OK",
+      if (!is.null(calls_env$server_etag)) paste0('etag: "', calls_env$server_etag, '"'),
+      if (existed) sprintf("content-range: bytes %d-%d/%d", start,
+        file.size(destfiles) - 1, file.size(destfiles)), "")
+    data.frame(success = TRUE, status_code = if (existed) 206L else 200L,
+               headers = I(list(hdr)))
   }
 }
 
@@ -66,12 +71,12 @@ test_that("a resume restarts when the remote revision changed, and binds ranges 
   part <- file.path(tmp, "x.duckdb.part")
   env <- new.env(); env$calls <- list(); env$server_etag <- "new"
   local_mocked_bindings(multi_download = fake_server(env), .package = "curl")
-  writeLines("OLD-", part, sep = ""); writeLines('{"etag":"old"}', paste0(part, ".meta"))
+  writeLines("OLD-", part, sep = ""); writeLines('{"etag":"old","url":"http://example/x"}', paste0(part, ".meta"))
   datapond:::transfer("http://example/x", part, list(etag = "new"), quiet = TRUE)
   expect_equal(readLines(part, warn = FALSE), "NEW-version-two")
   expect_false(env$calls[[1]]$existed)
   # same revision: the partial file is kept, resumed, and the range bound to the ETag
-  writeLines("OLD-", part, sep = ""); writeLines('{"etag":"new"}', paste0(part, ".meta"))
+  writeLines("OLD-", part, sep = ""); writeLines('{"etag":"new","url":"http://example/x"}', paste0(part, ".meta"))
   datapond:::transfer("http://example/x", part, list(etag = "new"), quiet = TRUE)
   expect_equal(readLines(part, warn = FALSE), "OLD-version-two")
   expect_true(env$calls[[2]]$existed)
@@ -81,7 +86,7 @@ test_that("a resume restarts when the remote revision changed, and binds ranges 
 test_that("no strong validator means no resume, and equal sizes are not one", {
   tmp <- withr::local_tempdir()
   part <- file.path(tmp, "x.duckdb.part")
-  env <- new.env(); env$calls <- list(); env$server_etag <- ""
+  env <- new.env(); env$calls <- list(); env$server_etag <- NULL
   local_mocked_bindings(multi_download = fake_server(env), .package = "curl")
   writeLines("OLD-", part, sep = ""); writeLines('{"size":15}', paste0(part, ".meta"))
   datapond:::transfer("http://example/x", part, list(size = 15), quiet = TRUE)
@@ -94,7 +99,7 @@ test_that("a revision change between HEAD and GET is detected and the transfer r
   part <- file.path(tmp, "x.duckdb.part")
   env <- new.env(); env$calls <- list(); env$server_etag <- "newer"
   local_mocked_bindings(multi_download = fake_server(env), .package = "curl")
-  writeLines("OLD-", part, sep = ""); writeLines('{"etag":"old"}', paste0(part, ".meta"))
+  writeLines("OLD-", part, sep = ""); writeLines('{"etag":"old","url":"http://example/x"}', paste0(part, ".meta"))
   res <- datapond:::transfer("http://example/x", part, list(etag = "old"), quiet = TRUE)
   expect_equal(length(env$calls), 2)         # resumed against "old", then restarted from scratch
   expect_equal(readLines(part, warn = FALSE), "NEW-version-two")
@@ -112,7 +117,7 @@ test_that("dp_update never trusts size alone", {
   local_mocked_bindings(remote_identity = function(url) list(size = file.size(local)))
   expect_match(datapond:::needs_update(datapond:::dp_get_database("testdb"), local), "cannot be verified")
   local_mocked_bindings(remote_identity = function(url) list(last_modified = "Tue, 15 Sep 2026 00:00:00 GMT"))
-  datapond:::write_sidecar(local, "testdb", "u", list(last_modified = "Tue, 15 Sep 2026 00:00:00 GMT"))
+  datapond:::write_sidecar(local, "testdb", datapond:::dp_get_database("testdb")$attach_url, list(last_modified = "Tue, 15 Sep 2026 00:00:00 GMT"))
   expect_null(datapond:::needs_update(datapond:::dp_get_database("testdb"), local))
 })
 
@@ -161,7 +166,7 @@ test_that("real HTTP: fresh download, header vectors, 206 resume, stale If-Range
   # 2. resume of an unchanged revision: server answers 206; the file completes and
   #    the 206 body length is not mistaken for the file length
   part <- paste0(dest, ".part")
-  writeBin(v1[1:20000], part); writeLines('{"etag":"v1","size":0}', paste0(part, ".meta"))
+  writeBin(v1[1:20000], part); jsonlite::write_json(list(etag = "v1", size = 0, url = url), paste0(part, ".meta"), auto_unbox = TRUE)
   unlink(dest)
   datapond:::download_file(url, dest, quiet = TRUE, id = "x")
   expect_identical(readBin(dest, "raw", file.size(dest)), v1)
@@ -171,7 +176,7 @@ test_that("real HTTP: fresh download, header vectors, 206 resume, stale If-Range
   #    and installs the new revision
   identity <- datapond:::remote_identity(url)         # etag v1
   writeBin(v2, served); writeLines("v2", etag_file)     # revision changes now
-  writeBin(v1[1:20000], part); writeLines('{"etag":"v1"}', paste0(part, ".meta"))
+  writeBin(v1[1:20000], part); jsonlite::write_json(list(etag = "v1", url = url), paste0(part, ".meta"), auto_unbox = TRUE)
   res <- datapond:::transfer(url, part, identity, quiet = TRUE)
   expect_identical(readBin(part, "raw", file.size(part)), v2)
   expect_equal(res$identity$etag, "v2")
@@ -205,7 +210,7 @@ test_that("the identity probe never buffers the whole file when HEAD is unusable
   expect_equal(id$etag, "v9"); expect_equal(id$size, length(big))
   # the server ignores Range and sends all 8 MiB with a 200: the probe still returns the
   # validator and must not allocate the body
-  writeLines("ignore-range", paste0(etag_file, ".mode"))
+  writeLines("no-head-ignore-range", paste0(etag_file, ".mode"))
   if (isTRUE(capabilities("profmem"))) {
     prof <- file.path(tmp, "mem.out"); Rprofmem(prof, threshold = 1024L * 1024L)
     id2 <- datapond:::remote_identity(url)
@@ -217,4 +222,5 @@ test_that("the identity probe never buffers the whole file when HEAD is unusable
     id2 <- datapond:::remote_identity(url)
   }
   expect_equal(id2$etag, "v9")
+  expect_true(any(readLines(paste0(etag_file, ".requests")) == "GET no-head-ignore-range"))
 })

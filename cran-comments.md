@@ -9,7 +9,11 @@
 
 ## Notes for CRAN
 
-* This is a new submission.
+* CRAN currently lists 0.1.0, published 2026-09-27:
+  <https://CRAN.R-project.org/package=datapond>.
+* This file's original check results above describe the prior submission.
+  Version 0.1.1 is development work; rerun release checks before resubmission.
+  No resubmission has been made.
 * All examples that reach the network are wrapped in `\dontrun{}`; the
   test suite runs offline against a fixture DuckDB file. The single network
   test is skipped on CRAN (`skip_on_cran()`).

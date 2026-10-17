@@ -40,7 +40,12 @@ identity_from_headers <- function(hd) {
   etag <- hd[["x-linked-etag"]] %||% hd[["etag"]]
   size <- hd[["x-linked-size"]] %||% hd[["content-length"]]
   out <- list()
-  if (!is.null(etag)) out$etag <- gsub('^W/|"', "", etag)
+  if (!is.null(etag) && nzchar(etag)) {
+    # Weak ETags do not identify byte-for-byte identical representations and
+    # must never be promoted to a strong If-Range validator (RFC 9110 13.1.5).
+    if (startsWith(etag, "W/")) out$weak_etag <- etag
+    else out$etag <- gsub('^"|"$', "", etag)
+  }
   if (!is.null(size)) out$size <- suppressWarnings(as.numeric(size))
   if (!is.null(hd[["last-modified"]])) out$last_modified <- hd[["last-modified"]]
   out
@@ -48,7 +53,13 @@ identity_from_headers <- function(hd) {
 
 # A validator that identifies a revision: the ETag, or failing that Last-Modified.
 # Size alone is not one (two revisions can have the same length).
-strong_validator <- function(identity) identity$etag %||% identity$last_modified
+strong_validator <- function(identity) {
+  # A quoted empty opaque tag (ETag: "") is also a valid strong validator.
+  if (!is.null(identity$etag)) return(identity$etag)
+  # If-Range must not substitute a date when an entity tag is present but weak.
+  if (!is.null(identity$weak_etag)) return(NULL)
+  identity$last_modified
+}
 
 sidecar_path <- function(dest) paste0(dest, ".datapond.json")
 
@@ -72,7 +83,8 @@ read_sidecar <- function(dest) {
 # server sends the whole file instead of a range if the revision changed meanwhile.
 # The GET response's own validator is compared with the one the transfer was planned
 # against; a mismatch (the file changed between HEAD and GET) discards the bytes and
-# starts over once. Without any validator there is no resume at all.
+# starts over once when resuming. A fresh full response adopts its own identity
+# without another download. Without any validator there is no resume at all.
 transfer <- function(url, part, identity, quiet = FALSE, resume = TRUE, attempts = 2) {
   meta <- paste0(part, ".meta")
   validator <- strong_validator(identity)
@@ -80,11 +92,25 @@ transfer <- function(url, part, identity, quiet = FALSE, resume = TRUE, attempts
     resumable <- resume && !is.null(validator)
     if (file.exists(part)) {
       prior <- if (file.exists(meta)) tryCatch(jsonlite::fromJSON(meta), error = function(e) NULL) else NULL
-      same <- resumable && !is.null(prior) && identical(strong_validator(prior), validator)
+      if (resume && !is.null(prior) && isTRUE(prior$complete) &&
+          identical(prior$url, url) && length(identity) == 0L &&
+          identical(as.numeric(prior$downloaded_size), as.numeric(file.size(part)))) {
+        stop("Could not verify the remote revision; completed download kept at ",
+             part, ". Retry later or use resume = FALSE to download afresh.", call. = FALSE)
+      }
+      same <- resumable && !is.null(prior) && identical(prior$url, url) &&
+        identical(strong_validator(prior), validator)
       if (!same) unlink(c(part, meta))
+      if (same && isTRUE(prior$complete) &&
+          identical(as.numeric(prior$downloaded_size), as.numeric(file.size(part))) &&
+          (is.null(identity$size) || is.na(identity$size) || identity$size == file.size(part))) {
+        # A previous transfer completed but installation failed (e.g. a locked
+        # destination). Reuse it only after rechecking its URL, revision and size.
+        return(invisible(list(part = part, identity = identity)))
+      }
     }
     if (!file.exists(part)) {
-      writeLines(jsonlite::toJSON(identity, auto_unbox = TRUE), meta)
+      writeLines(jsonlite::toJSON(c(identity, list(url = url)), auto_unbox = TRUE), meta)
     }
     headers <- if (resumable && file.exists(part) && file.size(part) > 0) {
       c(paste0("If-Range: ", if (!is.null(identity$etag)) paste0('"', identity$etag, '"') else identity$last_modified))
@@ -92,10 +118,13 @@ transfer <- function(url, part, identity, quiet = FALSE, resume = TRUE, attempts
     resuming <- resumable && file.exists(part) && file.size(part) > 0
     res <- curl::multi_download(url, part, resume = resumable, progress = !quiet, httpheader = headers)
     ok <- isTRUE(res$success) && !is.na(res$status_code) && res$status_code < 400
-    if (!ok && resuming && attempt < attempts) {
+    rejected <- !ok && resuming && res$status_code %in% c(200L, 416L)
+    if (rejected && attempt < attempts) {
       # A server that answers a mismatched If-Range with the whole entity (HTTP 200) makes
       # curl abort the resume; the partial file belongs to another revision, so discard
-      # it and transfer afresh against the server's current identity.
+      # it and transfer afresh against the server's current identity. An
+      # unsatisfiable range (416) also restarts. Network errors, interrupted
+      # 206 responses and server outages keep the partial bytes for retry.
       if (!quiet) message("Resume rejected by the server; restarting the download.")
       unlink(c(part, meta))
       identity <- remote_identity(url)
@@ -106,8 +135,12 @@ transfer <- function(url, part, identity, quiet = FALSE, resume = TRUE, attempts
       stop(sprintf("Download failed (HTTP %s): %s", res$status_code, url), call. = FALSE)
     }
     got <- response_identity(res)
-    got_validator <- strong_validator(got)
-    if (!is.null(validator) && !is.null(got_validator) && !identical(got_validator, validator)) {
+    changed <- if (!is.null(identity$etag)) {
+      !is.null(got$etag) && !identical(got$etag, identity$etag)
+    } else {
+      !is.null(got$last_modified) && !identical(got$last_modified, identity$last_modified)
+    }
+    if (resuming && !is.null(validator) && (!is.null(got$weak_etag) || changed)) {
       # the remote file changed while we were transferring: never install the mixture
       unlink(c(part, meta))
       if (attempt < attempts) {
@@ -118,8 +151,19 @@ transfer <- function(url, part, identity, quiet = FALSE, resume = TRUE, attempts
       }
       stop("The remote file kept changing during the download; try again later.", call. = FALSE)
     }
-    unlink(meta)
-    return(invisible(list(part = part, identity = if (length(got) > 0) utils::modifyList(identity, got) else identity)))
+    # A fresh HTTP body describes its own revision. Missing GET headers must
+    # not inherit a stale tag, date or length from the earlier HEAD response.
+    # A successful conditional range may retain the identity bound by If-Range.
+    final_identity <- if (!resuming && is_url(url)) got else {
+      if (length(got) > 0) utils::modifyList(identity, got) else identity
+    }
+    # GET's tag supersedes HEAD's tag, including changes in validator strength.
+    if (!is.null(got$weak_etag)) final_identity$etag <- NULL
+    if (!is.null(got$etag)) final_identity$weak_etag <- NULL
+    writeLines(jsonlite::toJSON(c(final_identity,
+      list(url = url, complete = TRUE, downloaded_size = file.size(part))),
+      auto_unbox = TRUE), meta)
+    return(invisible(list(part = part, identity = final_identity)))
   }
 }
 
@@ -188,11 +232,18 @@ download_file <- function(url, dest, quiet = FALSE, resume = TRUE, id = NULL) {
   done <- transfer(url, part, identity, quiet = quiet, resume = resume)
   identity <- done$identity
   if (!is.null(identity$size) && !is.na(identity$size) && file.size(part) != identity$size) {
-    unlink(part)
-    stop(sprintf("Download incomplete: %s of %s bytes.", file.size(part), identity$size), call. = FALSE)
+    downloaded_size <- file.size(part)
+    unlink(c(part, paste0(part, ".meta")))
+    stop(sprintf("Download incomplete: %s of %s bytes.", downloaded_size, identity$size), call. = FALSE)
   }
-  validate_database(part)
+  tryCatch(validate_database(part), error = function(e) {
+    # Complete transfer is not proof of valid database bytes. A later retry must
+    # fetch afresh after validation fails, while preserving the installed copy.
+    unlink(c(part, paste0(part, ".meta")))
+    stop(e)
+  })
   install_file(part, dest)
+  unlink(paste0(part, ".meta"))
   write_sidecar(dest, id %||% basename(dest), url, identity)
   invisible(dest)
 }
@@ -243,6 +294,9 @@ dp_download <- function(id, path = NULL, quiet = FALSE, resume = TRUE) {
 needs_update <- function(db, local) {
   url <- db$download_url %||% db$attach_url
   side <- read_sidecar(local)
+  # ETags are scoped to a resource URL; equal tags from two mirrors need not
+  # identify the same bytes.
+  if (!is.null(side$url) && !identical(side$url, url)) return("download URL changed")
   if (!is.null(side$local_size) && !identical(as.numeric(side$local_size), as.numeric(file.size(local)))) {
     return("local file changed since it was downloaded")
   }
@@ -250,6 +304,12 @@ needs_update <- function(db, local) {
   if (!is.null(side$etag) && !is.null(remote$etag)) {
     return(if (identical(side$etag, remote$etag)) NULL else "remote file changed")
   }
+  # Tag changes, including changes in strength, must precede date fallback.
+  # Equal weak tags alone do not establish byte identity.
+  side_tag <- side$weak_etag %||% side$etag
+  remote_tag <- remote$weak_etag %||% remote$etag
+  if (!is.null(side_tag) && !is.null(remote_tag) &&
+      !identical(side_tag, remote_tag)) return("remote file changed")
   if (!is.null(side$last_modified) && !is.null(remote$last_modified)) {
     return(if (identical(side$last_modified, remote$last_modified)) NULL else "remote file changed")
   }
