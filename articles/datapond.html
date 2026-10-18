@@ -66,9 +66,20 @@ Hugging Face. This package attaches those files over HTTP so that only
 the byte ranges your query touches are transferred, or downloads them
 once for local use.</p>
 <div class="section level2">
+<h2 id="install">Install<a class="anchor" aria-label="anchor" href="#install"></a>
+</h2>
+<p>The released package is available on <a href="https://CRAN.R-project.org/package=datapond" class="external-link">CRAN</a>:</p>
+<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="st">"datapond"</span><span class="op">)</span></span></code></pre></div>
+<p>CRAN 0.1.0 was published September 27, 2026. This development
+vignette also describes the 0.1.1 resource controls, available from
+<code>pak::pak("datapond-db/datapond-r")</code> until the next CRAN
+release.</p>
+</div>
+<div class="section level2">
 <h2 id="browse">Browse<a class="anchor" aria-label="anchor" href="#browse"></a>
 </h2>
-<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/datapond-db/datapond-r" class="external-link">datapond</a></span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/dp_list.html">dp_list</a></span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/dp_list.html">dp_databases</a></span><span class="op">(</span><span class="op">)</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"id"</span>, <span class="st">"rows"</span>, <span class="st">"size_gb"</span>, <span class="st">"data_date_range"</span><span class="op">)</span><span class="op">]</span></span>
@@ -79,17 +90,30 @@ once for local use.</p>
 </h2>
 <p><code><a href="../reference/dp_connect.html">dp_connect()</a></code> returns an ordinary DuckDB
 <code>DBIConnection</code>:</p>
-<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">con</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/dp_connect.html">dp_connect</a></span><span class="op">(</span><span class="st">"eoir"</span><span class="op">)</span></span>
 <span><span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"SELECT * FROM proceedings LIMIT 5"</span><span class="op">)</span></span></code></pre></div>
+<p>For bounded queries in the development version, configure DuckDB
+before attachment:</p>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/dp_disconnect.html">dp_disconnect</a></span><span class="op">(</span><span class="va">con</span><span class="op">)</span></span>
+<span><span class="va">con</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/dp_connect.html">dp_connect</a></span><span class="op">(</span><span class="st">"eoir"</span>, config <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>  memory_limit <span class="op">=</span> <span class="st">"1GB"</span>, threads <span class="op">=</span> <span class="st">"2"</span>,</span>
+<span>  temp_directory <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span><span class="st">"datapond-spill-"</span><span class="op">)</span>,</span>
+<span>  max_temp_directory_size <span class="op">=</span> <span class="st">"2GB"</span></span>
+<span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<p>The same list can be set with
+<code>options(datapond.duckdb_config = list(...))</code>. Leave headroom
+for R and the desktop: DuckDB’s memory limit is not a limit on the whole
+R process. Filter and aggregate before collecting data into R.</p>
 <p>Every database ships a data dictionary; <code><a href="../reference/dp_describe.html">dp_describe()</a></code>
 reads it:</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/dp_describe.html">dp_describe</a></span><span class="op">(</span><span class="va">con</span><span class="op">)</span>                         <span class="co"># tables</span></span>
 <span><span class="fu"><a href="../reference/dp_describe.html">dp_describe</a></span><span class="op">(</span><span class="va">con</span>, table <span class="op">=</span> <span class="st">"proceedings"</span><span class="op">)</span>  <span class="co"># columns, types, null %, join hints</span></span>
 <span><span class="fu"><a href="../reference/dp_describe.html">dp_describe</a></span><span class="op">(</span><span class="va">con</span>, search <span class="op">=</span> <span class="st">"judge"</span><span class="op">)</span>       <span class="co"># columns by name</span></span></code></pre></div>
 <p>dbplyr works unchanged:</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://dplyr.tidyverse.org" class="external-link">dplyr</a></span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/tbl.html" class="external-link">tbl</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"proceedings"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/count.html" class="external-link">count</a></span><span class="op">(</span><span class="va">DEC_CODE</span>, sort <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -102,7 +126,7 @@ reads it:</p>
 </h2>
 <p>Pass a vector of ids. Tables are then qualified by database id, and
 ids that contain a hyphen must be double-quoted in SQL:</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">con</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/dp_connect.html">dp_connect</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"cms-medicare"</span>, <span class="st">"openpayments"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">'SELECT * FROM "cms-medicare".physician_summary LIMIT 5'</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/tbl.html" class="external-link">tbl</a></span><span class="op">(</span><span class="va">con</span>, <span class="fu"><a href="https://rdrr.io/r/base/AsIs.html" class="external-link">I</a></span><span class="op">(</span><span class="st">'"openpayments".main.general_payments'</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fl">5</span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu"><a href="https://dplyr.tidyverse.org/reference/compute.html" class="external-link">collect</a></span><span class="op">(</span><span class="op">)</span></span>
@@ -114,7 +138,7 @@ ids that contain a hyphen must be double-quoted in SQL:</p>
 <p>Remote mode is cheap for counts and filters but <code>SELECT *</code>
 over a large table transfers most of the file. Download once for disk
 speed:</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/dp_download.html">dp_download</a></span><span class="op">(</span><span class="st">"dol-visas"</span><span class="op">)</span></span>
 <span><span class="va">con</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/dp_connect.html">dp_connect</a></span><span class="op">(</span><span class="st">"dol-visas"</span>, local <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/dp_update.html">dp_update</a></span><span class="op">(</span><span class="st">"dol-visas"</span><span class="op">)</span>   <span class="co"># re-download only if the registry is newer</span></span></code></pre></div>

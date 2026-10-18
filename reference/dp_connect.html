@@ -49,7 +49,12 @@ no full download) or from a local copy made with <code><a href="dp_download.html
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">dp_connect</span><span class="op">(</span><span class="va">id</span>, local <span class="op">=</span> <span class="cn">FALSE</span>, quiet <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">dp_connect</span><span class="op">(</span></span>
+<span>  <span class="va">id</span>,</span>
+<span>  local <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  quiet <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  config <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"datapond.duckdb_config"</span>, <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -67,6 +72,15 @@ files?</p></dd>
 
 <dt id="arg-quiet">quiet<a class="anchor" aria-label="anchor" href="#arg-quiet"></a></dt>
 <dd><p>Suppress progress messages?</p></dd>
+
+
+<dt id="arg-config">config<a class="anchor" aria-label="anchor" href="#arg-config"></a></dt>
+<dd><p>Named list of DuckDB configuration values, passed to
+<code><a href="https://r.duckdb.org/reference/duckdb.html" class="external-link">duckdb::duckdb()</a></code> before any database is attached. Defaults to
+<code>getOption("datapond.duckdb_config", list())</code>. Use <code>memory_limit</code>,
+<code>threads</code>, <code>temp_directory</code>, and <code>max_temp_directory_size</code> to bound query
+resources. Values must be non-missing scalars and are converted to strings
+for DuckDB. DuckDB's memory limit does not include all R allocations.</p></dd>
 
 </dl></div>
     <div class="section level2">

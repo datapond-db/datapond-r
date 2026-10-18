@@ -9,7 +9,12 @@ touches, so there is no full download) or from a local copy made with
 ## Usage
 
 ``` r
-dp_connect(id, local = FALSE, quiet = FALSE)
+dp_connect(
+  id,
+  local = FALSE,
+  quiet = FALSE,
+  config = getOption("datapond.duckdb_config", list())
+)
 ```
 
 ## Arguments
@@ -28,6 +33,17 @@ dp_connect(id, local = FALSE, quiet = FALSE)
 - quiet:
 
   Suppress progress messages?
+
+- config:
+
+  Named list of DuckDB configuration values, passed to
+  [`duckdb::duckdb()`](https://r.duckdb.org/reference/duckdb.html)
+  before any database is attached. Defaults to
+  `getOption("datapond.duckdb_config", list())`. Use `memory_limit`,
+  `threads`, `temp_directory`, and `max_temp_directory_size` to bound
+  query resources. Values must be non-missing scalars and are converted
+  to strings for DuckDB. DuckDB's memory limit does not include all R
+  allocations.
 
 ## Value
 
