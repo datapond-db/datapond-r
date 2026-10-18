@@ -13,10 +13,23 @@ The Python equivalent is [`datapond` on PyPI](https://pypi.org/project/datapond/
 
 ## Install
 
+Install the released package from [CRAN](https://CRAN.R-project.org/package=datapond):
+
+```r
+install.packages("datapond")
+```
+
+CRAN version **0.1.0** was published on September 27, 2026. The development
+version **0.1.1** in this repository includes additional download fixes and
+resource controls that are not yet on CRAN. To use that version:
+
 ```r
 # install.packages("pak")
 pak::pak("datapond-db/datapond-r")
 ```
+
+See the [CRAN check results](https://cran.r-project.org/web/checks/check_results_datapond.html)
+and [development changes](NEWS.md).
 
 ## Quick start
 
@@ -53,6 +66,26 @@ con <- dp_connect(c("cms-medicare", "openpayments"))
 DBI::dbGetQuery(con, 'SELECT * FROM "cms-medicare".physician_summary LIMIT 5')
 tbl(con, I('"openpayments".main.general_payments')) |> head(5) |> collect()
 ```
+
+## Bound query resources
+
+In the development version, pass DuckDB settings before remote attachment:
+
+```r
+con <- dp_connect("eoir", config = list(
+  memory_limit = "1GB", threads = "2",
+  temp_directory = tempfile("datapond-spill-"),
+  max_temp_directory_size = "2GB"
+))
+# Filter and aggregate in SQL before collecting results into R.
+dp_disconnect(con)
+```
+
+Set `options(datapond.duckdb_config = list(...))` to use the same settings for
+later connections. DuckDB's memory limit does not cover all R allocations;
+leave desktop headroom and enough disk space for spill files and downloads.
+CRAN 0.1.0 users can set DuckDB resource settings with `DBI::dbExecute()` after
+connecting, or install the development version for configuration at startup.
 
 ## Local copies
 

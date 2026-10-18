@@ -20,14 +20,19 @@ local_file_server <- function(file, etag_file, env = parent.frame()) {
       # a control file can make the server misbehave: "no-head" answers HEAD with 405 and
       # "ignore-range" answers every GET with the whole entity (HTTP 200)
       mode <- if (file.exists(paste0(etag_file, ".mode"))) readLines(paste0(etag_file, ".mode"), warn = FALSE)[1] else "range"
-      if (identical(req$REQUEST_METHOD, "HEAD") && mode == "no-head") {
+      if (identical(req$REQUEST_METHOD, "HEAD") && mode %in% c("no-head", "no-head-ignore-range", "unavailable")) {
         return(list(status = 405L, headers = c("Content-Length" = "0"), body = ""))
       }
       if (identical(req$REQUEST_METHOD, "HEAD")) {
         return(list(status = 200L, headers = c(base, "Content-Length" = as.character(total)), body = ""))
       }
+      cat(sprintf("%s %s\n", req$REQUEST_METHOD, mode),
+          file = paste0(etag_file, ".requests"), append = TRUE)
+      if (mode == "unavailable") {
+        return(list(status = 503L, headers = c("Content-Length" = "0"), body = ""))
+      }
       range <- req$HTTP_RANGE; if_range <- req$HTTP_IF_RANGE
-      if (!is.null(range) && mode != "ignore-range" && (is.null(if_range) || identical(if_range, etag))) {
+      if (!is.null(range) && !mode %in% c("ignore-range", "no-head-ignore-range") && (is.null(if_range) || identical(if_range, etag))) {
         start <- as.integer(sub("bytes=([0-9]+)-.*", "\\1", range))
         part <- bytes[(start + 1):total]
         return(list(status = 206L, headers = c(base, "Content-Range" = sprintf("bytes %d-%d/%d", start, total - 1, total),

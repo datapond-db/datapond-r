@@ -16,6 +16,18 @@ database is a single `.duckdb` file hosted on Hugging Face. This package attache
 those files over HTTP so that only the byte ranges your query touches are
 transferred, or downloads them once for local use.
 
+## Install
+
+The released package is available on [CRAN](https://CRAN.R-project.org/package=datapond):
+
+```{r}
+install.packages("datapond")
+```
+
+CRAN 0.1.0 was published September 27, 2026. This development vignette also
+describes the 0.1.1 resource controls, available from
+`pak::pak("datapond-db/datapond-r")` until the next CRAN release.
+
 ## Browse
 
 ```{r}
@@ -33,6 +45,21 @@ dp_info("eoir")
 con <- dp_connect("eoir")
 DBI::dbGetQuery(con, "SELECT * FROM proceedings LIMIT 5")
 ```
+
+For bounded queries in the development version, configure DuckDB before attachment:
+
+```{r}
+dp_disconnect(con)
+con <- dp_connect("eoir", config = list(
+  memory_limit = "1GB", threads = "2",
+  temp_directory = tempfile("datapond-spill-"),
+  max_temp_directory_size = "2GB"
+))
+```
+
+The same list can be set with `options(datapond.duckdb_config = list(...))`.
+Leave headroom for R and the desktop: DuckDB's memory limit is not a limit on
+the whole R process. Filter and aggregate before collecting data into R.
 
 Every database ships a data dictionary; `dp_describe()` reads it:
 

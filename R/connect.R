@@ -19,6 +19,12 @@ attach_sql <- function(con, source, alias) {
 #' @param local Attach local copies under [dp_data_dir()] instead of remote
 #'   files?
 #' @param quiet Suppress progress messages?
+#' @param config Named list of DuckDB configuration values, passed to
+#'   [duckdb::duckdb()] before any database is attached. Defaults to
+#'   `getOption("datapond.duckdb_config", list())`. Use `memory_limit`,
+#'   `threads`, `temp_directory`, and `max_temp_directory_size` to bound query
+#'   resources. Values must be non-missing scalars and are converted to strings
+#'   for DuckDB. DuckDB's memory limit does not include all R allocations.
 #' @return A `duckdb_connection` (a `DBIConnection`). Close it with
 #'   [dp_disconnect()].
 #' @export
@@ -32,11 +38,23 @@ attach_sql <- function(con, source, alias) {
 #' DBI::dbGetQuery(con, 'SELECT * FROM "cms-medicare".physician_summary LIMIT 5')
 #' dp_disconnect(con)
 #' }
-dp_connect <- function(id, local = FALSE, quiet = FALSE) {
+dp_connect <- function(id, local = FALSE, quiet = FALSE,
+                       config = getOption("datapond.duckdb_config", list())) {
   stopifnot(is.character(id), length(id) >= 1L, !anyNA(id))
+  if (!is.list(config) || (length(config) > 0L &&
+      (is.null(names(config)) || anyNA(names(config)) ||
+       any(!nzchar(names(config))) || anyDuplicated(names(config))))) {
+    stop("config must be a named list of DuckDB settings.", call. = FALSE)
+  }
+  config <- lapply(config, function(value) {
+    if (!is.atomic(value) || length(value) != 1L || anyNA(value)) {
+      stop("config values must be non-missing scalars.", call. = FALSE)
+    }
+    as.character(value)
+  })
   entries <- lapply(id, dp_get_database)
 
-  con <- DBI::dbConnect(duckdb::duckdb(), dbdir = ":memory:")
+  con <- DBI::dbConnect(duckdb::duckdb(config = config), dbdir = ":memory:")
   ok <- FALSE
   on.exit(if (!ok) DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
 

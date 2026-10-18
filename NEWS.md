@@ -1,4 +1,33 @@
-# datapond 0.1.1
+# datapond 0.1.1 (development)
+
+* Interrupted ranged transfers retain their partial bytes for the next call;
+  rejected or unsatisfiable ranges still restart safely.
+
+* A transient identity-probe failure preserves completed downloads for retry.
+  Date-bound resumes can adopt a strong response tag without re-downloading.
+
+* Fresh HTTP responses no longer inherit stale HEAD validators. Changes in
+  ETag strength trigger updates even when Last-Modified is unchanged.
+* Incomplete downloads report the received byte count and clear temporary
+  bytes and completion metadata before a retry.
+
+* `dp_connect(config = ...)` and `options(datapond.duckdb_config = ...)`
+  allow memory, thread and spill limits before database attachment.
+* Weak ETags no longer enable a ranged resume. Update and partial-download
+  identities are scoped to the source URL, so a new mirror cannot accidentally
+  match an unrelated ETag.
+* Completed downloads retain their metadata until installation succeeds. If
+  installation fails, a retry reuses the completed file after rechecking its
+  URL, revision and size, instead of downloading it again.
+* A failed database validation clears the completed-transfer marker so retry
+  fetches fresh bytes. A full fresh response uses its own identity without a
+  redundant transfer; resumed responses still restart after validator changes.
+* Empty quoted ETags remain valid strong validators, and differing weak ETags
+  trigger an update even when Last-Modified is unchanged.
+* DuckDB configuration accepts scalar numeric and logical values as well as
+  strings, with clear errors for missing or vector values.
+* Installation documentation now links the live CRAN release (0.1.0, published
+  September 27, 2026) and distinguishes development-only changes.
 
 * The identity probe used when a server's HEAD carries no validator reads one
   byte through a connection and closes it, so a server that ignores `Range`
@@ -27,7 +56,7 @@
   a C/ASCII locale; an unparseable response falls back to the cached copy.
 * `dp_download(path = "some/dir/")` creates the directory.
 
-# datapond 0.1.0
+# datapond 0.1.0 (CRAN: 2026-09-27)
 
 * Initial release: `dp_list()`, `dp_databases()`, `dp_info()`, `dp_registry()`,
   `dp_connect()`, `dp_disconnect()`, `dp_download()`, `dp_update()`,
