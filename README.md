@@ -4,10 +4,9 @@
 
 R client for the [datapond](https://datapond-db.github.io/website/) registry of
 curated DuckDB databases built from public government and research data:
-immigration courts, ICE enforcement, campaign finance, clinical trials, Medicare
-billing, industry payments, visa disclosures, and higher education. No full
-download, no API keys: DuckDB attaches the remote file over HTTP and fetches
-only the byte ranges your query touches.
+immigration, courts and judges, campaign finance, health, education, occupations,
+employment and fatal crashes. No full download is required first and no API key
+is needed: DuckDB reads ranges over HTTP and executes queries on your machine.
 
 The Python equivalent is [`datapond` on PyPI](https://pypi.org/project/datapond/).
 
@@ -39,7 +38,7 @@ library(datapond)
 dp_list()                 # database ids
 dp_info("eoir")           # size, source, coverage, links
 
-con <- dp_connect("eoir") # attaches remotely; nothing is downloaded in full
+con <- dp_connect("eoir") # attaches over HTTP; no full download required first
 DBI::dbGetQuery(con, "SELECT * FROM proceedings LIMIT 5")
 
 dp_describe(con)                         # tables with row counts
@@ -54,22 +53,35 @@ The connection is a plain `duckdb_connection`, so `DBI` and `dbplyr` work as usu
 ```r
 library(dplyr)
 con <- dp_connect("eoir")
-tbl(con, "proceedings") |> count(DEC_CODE, sort = TRUE) |> head(10) |> collect()
+tbl(con, "proceedings") |> select(DEC_CODE) |> head(10) |> collect()
+dp_disconnect(con)
 ```
 
 ## Several databases at once
 
 ```r
+library(datapond)
+library(dplyr)
 con <- dp_connect(c("cms-medicare", "openpayments"))
 # Tables are qualified by database id; ids with a hyphen need double quotes.
-# With dbplyr, pass the qualified name through I() (in_catalog() does not accept hyphens).
+# With dbplyr, I() preserves the explicitly quoted catalog and schema name.
 DBI::dbGetQuery(con, 'SELECT * FROM "cms-medicare".physician_summary LIMIT 5')
 tbl(con, I('"openpayments".main.general_payments')) |> head(5) |> collect()
+dp_disconnect(con)
 ```
 
 ## Bound query resources
 
-In the development version, pass DuckDB settings before remote attachment:
+For released CRAN 0.1.0, set limits immediately after attachment and before a query:
+
+```r
+con <- datapond::dp_connect("onet")
+DBI::dbExecute(con, "SET memory_limit='128MiB'; SET threads=1; SET max_temp_directory_size='0B'")
+DBI::dbGetQuery(con, "SELECT onet_soc_code, title FROM occupation_data ORDER BY onet_soc_code LIMIT 5")
+datapond::dp_disconnect(con)
+```
+
+These limits cover DuckDB's buffer pool, not all R allocations. With spill disabled, larger queries can fail. In development 0.1.1, pass settings before remote attachment:
 
 ```r
 con <- dp_connect("eoir", config = list(
@@ -89,14 +101,16 @@ connecting, or install the development version for configuration at startup.
 
 ## Local copies
 
-Remote queries transfer the byte ranges they touch, which is cheap for counts and
-filters but not for `SELECT *` over a 37 GB table. Download once for disk speed:
+Remote queries fetch metadata and data ranges over HTTP. A simple base-table count may use metadata, but filters, views and joins can scan much of a file. A small result or a final `LIMIT` does not guarantee a small transfer. Download once for repeated disk reads:
 
 ```r
 dp_download("dol-visas")                     # to dp_data_dir()
 con <- dp_connect("dol-visas", local = TRUE)
-dp_update("dol-visas")                       # re-download if the registry is newer
+dp_disconnect(con)                          # close the local file before replacing it
+dp_update("dol-visas")                       # compare with the published remote version
 ```
+
+File size describes disk storage, not RAM. Allow room for the new file, temporary download bytes and any existing copy. Close connections to a local file before updating it, especially on Windows.
 
 Set `options(datapond.data_dir = "~/.datapond")` to share downloads with the
 Python package.
