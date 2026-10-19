@@ -2,9 +2,10 @@
 
 Opens an in-memory DuckDB connection and attaches each requested
 database read-only, either remotely from its `attach_url` (the default;
-DuckDB's `httpfs` extension fetches only the byte ranges a query
-touches, so there is no full download) or from a local copy made with
+DuckDB's `httpfs` extension fetches byte ranges without requiring a full
+download first) or from a local copy made with
 [`dp_download()`](https://datapond-db.github.io/datapond-r/reference/dp_download.md).
+Large remote queries can still transfer much of a file.
 
 ## Usage
 
@@ -43,7 +44,11 @@ dp_connect(
   `threads`, `temp_directory`, and `max_temp_directory_size` to bound
   query resources. Values must be non-missing scalars and are converted
   to strings for DuckDB. DuckDB's memory limit does not include all R
-  allocations.
+  allocations. This argument was introduced in development version 0.1.1
+  and is not in CRAN 0.1.0. With CRAN 0.1.0, set query limits after
+  connecting using
+  [`DBI::dbExecute()`](https://dbi.r-dbi.org/reference/dbExecute.html),
+  or use a direct DuckDB connection for startup limits.
 
 ## Value
 

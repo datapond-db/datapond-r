@@ -76,7 +76,7 @@ dbplyr works unchanged:
 
 library(dplyr)
 tbl(con, "proceedings") |>
-  count(DEC_CODE, sort = TRUE) |>
+  select(DEC_CODE) |>
   head(10) |>
   collect()
 dp_disconnect(con)
@@ -97,15 +97,21 @@ dp_disconnect(con)
 
 ## Local copies
 
-Remote mode is cheap for counts and filters but `SELECT *` over a large
-table transfers most of the file. Download once for disk speed:
+Remote mode fetches metadata and data ranges over HTTP. Filters, views
+and joins can scan much of a file, even when the result is small.
+Download once for repeated disk reads:
 
 ``` r
 
 dp_download("dol-visas")
 con <- dp_connect("dol-visas", local = TRUE)
-dp_update("dol-visas")   # re-download only if the registry is newer
+dp_disconnect(con)      # close the local file before replacing it
+dp_update("dol-visas")   # compare with the published remote version
 ```
+
+File size describes disk storage, not RAM. Allow room for the new file,
+temporary download bytes and any existing copy. Close connections to a
+local file before updating it, especially on Windows.
 
 Set `options(datapond.data_dir = "~/.datapond")` to share downloads with
 the Python package.
