@@ -112,6 +112,12 @@ dp_update("dol-visas")                       # compare with the published remote
 
 File size describes disk storage, not RAM. Allow room for the new file, temporary download bytes and any existing copy. Close connections to a local file before updating it, especially on Windows.
 
+In development 0.1.1, an explicit `dp_update()` re-downloads a legacy copy
+without a usable identity sidecar, even if its local timestamp is newer than
+the registry date. A timestamp does not prove which source revision it contains.
+If the transfer or validation fails, the existing local copy is preserved.
+This correction is not in CRAN 0.1.0.
+
 Set `options(datapond.data_dir = "~/.datapond")` to share downloads with the
 Python package.
 

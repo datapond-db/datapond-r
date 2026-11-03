@@ -35,7 +35,7 @@ test_that("dp_update compares the remote identity, not the modification time", {
   expect_message(dp_update("testdb"), "remote file changed")
 })
 
-test_that("a copy without a sidecar is not trusted on the registry's release day", {
+test_that("a copy without a sidecar is not trusted from the registry date", {
   local_datapond()
   local_mocked_bindings(download_file = fake_download, remote_identity = function(url) list())
   dp_download("testdb", quiet = TRUE)
@@ -43,9 +43,9 @@ test_that("a copy without a sidecar is not trusted on the registry's release day
   db <- datapond:::dp_get_database("testdb")
   local <- dp_local_path("testdb")
   Sys.setFileTime(local, as.POSIXct(paste(db$updated, "08:00:00"), tz = "UTC"))
-  expect_match(datapond:::needs_update(db, local), "newer release|no version")
+  expect_match(datapond:::needs_update(db, local), "no recorded remote identity")
   Sys.setFileTime(local, as.POSIXct(db$updated, tz = "UTC") + 2 * 86400)
-  expect_null(datapond:::needs_update(db, local))
+  expect_match(datapond:::needs_update(db, local), "no recorded remote identity")
 })
 
 fake_server <- function(calls_env) {
