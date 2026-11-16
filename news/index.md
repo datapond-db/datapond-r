@@ -2,6 +2,13 @@
 
 ## datapond 0.1.1 (development)
 
+- [`dp_update()`](https://datapond-db.github.io/datapond-r/reference/dp_update.md)
+  no longer treats an untracked legacy copy as current merely because
+  its local timestamp is later than the registry date. A missing,
+  unreadable or unverifiable identity record now requires a fresh
+  download when update is requested. Failed replacement still preserves
+  the old copy.
+
 - Interrupted ranged transfers retain their partial bytes for the next
   call; rejected or unsatisfiable ranges still restart safely.
 
