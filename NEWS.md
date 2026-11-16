@@ -1,4 +1,4 @@
-# datapond 0.1.1 (development)
+# datapond 0.1.1
 
 * `dp_update()` no longer treats an untracked legacy copy as current merely
   because its local timestamp is later than the registry date. A missing,
