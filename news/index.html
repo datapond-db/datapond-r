@@ -34,7 +34,7 @@
     </div>
 
     <div class="section level2">
-<h2 class="pkg-version" data-toc-text="0.1.1" id="datapond-011-development">datapond 0.1.1 (development)<a class="anchor" aria-label="anchor" href="#datapond-011-development"></a></h2>
+<h2 class="pkg-version" data-toc-text="0.1.1" id="datapond-011">datapond 0.1.1<a class="anchor" aria-label="anchor" href="#datapond-011"></a></h2>
 <ul><li><p><code><a href="../reference/dp_update.html">dp_update()</a></code> no longer treats an untracked legacy copy as current merely because its local timestamp is later than the registry date. A missing, unreadable or unverifiable identity record now requires a fresh download when update is requested. Failed replacement still preserves the old copy.</p></li>
 <li><p>Interrupted ranged transfers retain their partial bytes for the next call; rejected or unsatisfiable ranges still restart safely.</p></li>
 <li><p>A transient identity-probe failure preserves completed downloads for retry. Date-bound resumes can adopt a strong response tag without re-downloading.</p></li>

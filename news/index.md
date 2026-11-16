@@ -1,6 +1,6 @@
 # Changelog
 
-## datapond 0.1.1 (development)
+## datapond 0.1.1
 
 - [`dp_update()`](https://datapond-db.github.io/datapond-r/reference/dp_update.md)
   no longer treats an untracked legacy copy as current merely because
