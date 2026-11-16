@@ -74,7 +74,15 @@ write_sidecar <- function(dest, id, url, identity) {
 read_sidecar <- function(dest) {
   p <- sidecar_path(dest)
   if (!file.exists(p)) return(list())
-  tryCatch(jsonlite::fromJSON(p, simplifyVector = TRUE), error = function(e) list())
+  data <- tryCatch(jsonlite::fromJSON(p, simplifyVector = TRUE), error = function(e) list())
+  if (!is.list(data) || is.null(names(data)) || is.data.frame(data)) return(list())
+  for (key in c("id", "url", "etag", "weak_etag", "last_modified")) {
+    value <- data[[key]]
+    if (!is.null(value) && (!is.character(value) || length(value) != 1L || is.na(value))) return(list())
+  }
+  if (!is.null(data$local_size) && (!is.numeric(data$local_size) ||
+      length(data$local_size) != 1L || !is.finite(data$local_size) || data$local_size < 0)) return(list())
+  data
 }
 
 # Transfer `url` to `part`. A partial file is resumed only when (a) the server gave a
@@ -294,6 +302,8 @@ dp_download <- function(id, path = NULL, quiet = FALSE, resume = TRUE) {
 needs_update <- function(db, local) {
   url <- db$download_url %||% db$attach_url
   side <- read_sidecar(local)
+  # A timestamp cannot identify the bytes in an untracked or legacy copy.
+  if (length(side) == 0) return("local copy has no recorded remote identity")
   # ETags are scoped to a resource URL; equal tags from two mirrors need not
   # identify the same bytes.
   if (!is.null(side$url) && !identical(side$url, url)) return("download URL changed")
@@ -314,18 +324,7 @@ needs_update <- function(db, local) {
     return(if (identical(side$last_modified, remote$last_modified)) NULL else "remote file changed")
   }
   if (length(side) > 0 && length(remote) > 0) return("remote revision cannot be verified (no ETag or Last-Modified)")
-  updated <- db$updated
-  if (!is.null(updated)) {
-    remote_dt <- as.POSIXct(updated, tz = "UTC",
-                            tryFormats = c("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"))
-    if (!is.na(remote_dt)) {
-      # a bare date could mean any time that day: only a copy from a later day is trusted
-      if (nchar(updated) <= 10) remote_dt <- remote_dt + 86399
-      if (file.mtime(local) > remote_dt) return(NULL)
-      return("registry lists a newer release")
-    }
-  }
-  "no version information for the local copy"
+  "remote revision cannot be verified from recorded identity"
 }
 
 #' Update a local database if the remote file has changed
@@ -333,9 +332,9 @@ needs_update <- function(db, local) {
 #' Compares the identity of the remote file (ETag, else Last-Modified, from a
 #' HEAD request) with the one recorded when the local copy was downloaded, and
 #' re-downloads when they differ or when the revision cannot be verified. Copies
-#' without that record fall back to the registry's `updated` date versus the
-#' file's modification time and are re-downloaded whenever that comparison is
-#' inconclusive. The registry is re-fetched first.
+#' without a usable identity record are re-downloaded when update is requested;
+#' local modification times and registry dates cannot prove which bytes they
+#' contain. The registry is re-fetched first.
 #'
 #' @inheritParams dp_download
 #' @return The local path, invisibly.
