@@ -28,7 +28,7 @@ jobs:
         run: |
           tlmgr install courier makeindex
           kpsewhich pcrr8t.tfm
-          makeindex --version
+          command -v makeindex
       - name: Preflight indexed PDF manual
         run: R CMD Rd2pdf --no-preview --output="${RUNNER_TEMP}/datapond-manual.pdf" .
       - run: sudo apt-get update && sudo apt-get install -y tidy
