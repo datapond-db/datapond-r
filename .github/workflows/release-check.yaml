@@ -24,10 +24,13 @@ jobs:
           r-version: ${{ matrix.r }}
           use-public-rspm: true
       - uses: r-lib/actions/setup-tinytex@v2
-      - name: Install PDF manual font dependency
+      - name: Install and verify PDF manual tools
         run: |
-          tlmgr install courier
+          tlmgr install courier makeindex
           kpsewhich pcrr8t.tfm
+          makeindex --version
+      - name: Preflight indexed PDF manual
+        run: R CMD Rd2pdf --no-preview --output="${RUNNER_TEMP}/datapond-manual.pdf" .
       - run: sudo apt-get update && sudo apt-get install -y tidy
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
